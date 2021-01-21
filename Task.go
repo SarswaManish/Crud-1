@@ -32,13 +32,13 @@ type Customer struct{
 
 
 func dateInSeconds(d1 string) int {
-	d1Slice := strings.Split(d1, "/")
+	Slice := strings.Split(d1, "/")
 
-	newDate := d1Slice[2] + "/" + d1Slice[1] + "/" + d1Slice[0]
-	myDate, err := time.Parse("2006/01/02", newDate)
+	newDate := Slice[2] + "/" + Slice[1] + "/" + Slice[0]
+	myDate, ok := time.Parse("2006/01/02", newDate)
 
-	if err != nil {
-		panic(err)
+	if ok != nil {
+		panic(ok)
 	}
 
 	return int(time.Now().Unix() - myDate.Unix())
@@ -47,235 +47,238 @@ func dateInSeconds(d1 string) int {
 
 func getCustomer(w http.ResponseWriter,r *http.Request){
 
-	db,err:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
-	if err!=nil{
-		panic(err)
+	db,ok:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
+	defer db.Close()
+	if ok!=nil{
+		panic(ok)
 	}
 
-	var idr[] interface {}
-	x:=strings.Split(r.RequestURI,"=")
+	var info[] interface {}
+	slice:=strings.Split(r.RequestURI,"=")
 	var Name string
-	if len(x)==1{
+	if len(slice)==1{
 		Name=""
 	}else{
-		Name=x[1]
+		Name=slice[1]
 	}
 
 
 	query:=`select * from customer inner join address on customer.id=address.cid`
 	if len(Name)!=0{
 		query+=` where customer.name=?`
-		idr=append(idr,Name)
+		info=append(info,Name)
 	}
-	rows,err:=db.Query(query,idr...)
-	if err!=nil {
-		panic(err)
+	rows,ok:=db.Query(query,info...)
+	if ok!=nil {
+		panic(ok)
 	}
 
-	var result []Customer
+	var response []Customer
 
 	defer rows.Close()
 
 	for rows.Next() {
-		var cust Customer
-
-		err = rows.Scan(&cust.Id,&cust.Name,&cust.Dob,&cust.Add.Id,&cust.Add.StreetName,&cust.Add.City,&cust.Add.State,&cust.Add.CustomerId)
-		result = append(result, cust)
-
-
+		var detail Customer
+		ok = rows.Scan(&detail.Id,&detail.Name,&detail.Dob,&detail.Add.Id,&detail.Add.StreetName,&detail.Add.City,&detail.Add.State,&detail.Add.CustomerId)
+		response = append(response, detail)
 	}
-	json.NewEncoder(w).Encode(result)
+	if response==nil{
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	json.NewEncoder(w).Encode(response)
+
 
 }
 
 
-func getCustomerId(w http.ResponseWriter,r *http.Request){
-	db,err:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
-	if err!=nil{
+func getCustomerById(w http.ResponseWriter,r *http.Request){
+	db,ok:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
+	if ok!=nil{
+		panic(ok)
 	}
 
 	defer db.Close()
 	vars:=mux.Vars(r)
 	id:=vars["id"]
 
-
-	query:="select * from cust"
-	var ids[] interface{}
-	if(id!="0"){
+	query:="select * from customer inner join address on customer.id=address.cid"
+	if id=="0"{
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var info[] interface{}
+	if id!="0" {
 		query=`select * from customer inner join address on customer.id=address.cid where customer.id=?`
 		x,_:=strconv.Atoi(id)
-		ids=append(ids,x)
+		info=append(info,x)
 	}
-	rows,_:=db.Query(query,ids...)
-	defer rows.Close()
-	var c Customer
-
-	for rows.Next(){
-
-		rows.Scan(&c.Id,&c.Name,&c.Dob,&c.Add.Id,&c.Add.StreetName,&c.Add.City,&c.Add.State,&c.Add.CustomerId)
-
+	row,_:=db.Query(query,info...)
+	defer row.Close()
+	var response Customer
+	for row.Next(){
+		row.Scan(&response.Id,&response.Name,&response.Dob,&response.Add.Id,&response.Add.StreetName,&response.Add.City,&response.Add.State,&response.Add.CustomerId)
 	}
-
-		json.NewEncoder(w).Encode(c)
+		if response.Id==0{
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		json.NewEncoder(w).Encode(response)
 }
 
 
 func createCustomer(w http.ResponseWriter,r *http.Request){
-	db,err:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
-		if err!=nil{
+	db,ok:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
+	defer db.Close()
+	if ok!=nil{
+			panic(ok)
 		}
-	var idr[] interface{}
-	var c Customer
+	var info[] interface{}
+	var customer Customer
 	query:=`insert into customer (name,dob) values(?,?)`
 	body,_:=ioutil.ReadAll(r.Body)
-	json.Unmarshal(body,&c)
-	idr=append(idr,&c.Name)
-	idr=append(idr,&c.Dob)
-	age:=dateInSeconds(c.Dob)
+	json.Unmarshal(body,&customer)
+	if customer.Name=="" || customer.Dob==""{
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	info=append(info,&customer.Name)
+	info=append(info,&customer.Dob)
+	age:=dateInSeconds(customer.Dob)
 	if age/(365*24*3600) <18 {
 		w.WriteHeader(http.StatusBadRequest)
 		io.WriteString(w,"not eligible")
 		return
 	}
-	row,er:=db.Exec(query,idr...)
-	if er!=nil{
-
-	}
+	row,_:=db.Exec(query,info...)
 	query=`insert into address (street_name,city,state,cid) values(?,?,?,?)`
-	var idd[] interface{}
-	idd=append(idd,&c.Add.StreetName)
-	idd=append(idd,&c.Add.City)
-	idd=append(idd,&c.Add.State)
+	var addr[] interface{}
+	if customer.Add.StreetName=="" || customer.Add.City=="" || customer.Add.State==""{
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	addr=append(addr,&customer.Add.StreetName)
+	addr=append(addr,&customer.Add.City)
+	addr=append(addr,&customer.Add.State)
 
-	id,err:=row.LastInsertId()
-	idd=append(idd,id)
-	_,err=db.Exec(query,idd...)
-	if err!=nil{
-
+	id,ok1:=row.LastInsertId()
+	if ok1!=nil{
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	addr=append(addr,id)
+	_,ok=db.Exec(query,addr...)
+	if ok!=nil{
+		panic(ok)
 	}
 	query=`select * from customer inner join address on customer.id=address.cid where customer.id=?`
 
 
-	rows,err:=db.Query(query,id)
-	var cust Customer
-	for rows.Next() {
-
-		rows.Scan(&cust.Id, &cust.Name, &cust.Dob, &cust.Add.Id, &cust.Add.StreetName, &cust.Add.City, &cust.Add.State, &cust.Add.CustomerId)
+	newRow,_:=db.Query(query,id)
+	var detail Customer
+	for newRow.Next() {
+		newRow.Scan(&detail.Id, &detail.Name, &detail.Dob, &detail.Add.Id, &detail.Add.StreetName, &detail.Add.City, &detail.Add.State, &detail.Add.CustomerId)
 	}
-	json.NewEncoder(w).Encode(cust)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(detail)
 }
 
 
-
+//update customer will update the details of customer other than id and dateOfBirth(dob)
 func updateCustomer(w http.ResponseWriter,r *http.Request){
-		db,err:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
-		if err!=nil{
-
+		db,ok:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
+		defer db.Close()
+		if ok!=nil{
+			panic(ok)
 		}
 		vars:=mux.Vars(r)
-		ide:=vars["id"]
+		id:=vars["id"]
 		query:=`update customer set`
-		var idr [] interface{}
+		var info [] interface{}
 
-		var c Customer
+		var customer Customer
 		body,_:=ioutil.ReadAll(r.Body)
-		json.Unmarshal(body,&c)
-		fmt.Println(c)
-		if c.Name!=""{
-			query+=" customer.name=?"
-			idr=append(idr,c.Name)
+		json.Unmarshal(body,&customer)
+		if customer.Name!=""{
+			query+=" name=?"
+			info=append(info,customer.Name)
 		}
 
 		query+=" where customer.id=?"
-
-		idr=append(idr,ide)
-		_,er:=db.Exec(query,idr...)
+		info=append(info,id)
+		_,er:=db.Exec(query,info...)
 
 		if er!=nil{
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		fmt.Println("c addrs is ", c.Add)
 		query=`update address set `
 		var idd []interface{}
-		if c.Add.StreetName!="" {
-			idd=append(idd,c.Add.StreetName)
-			query+="street_name=?, "
+		if customer.Add.StreetName!="" {
+			idd=append(idd,customer.Add.StreetName)
+			query+=" street_name=? "
 		}
 
-		if c.Add.City!=""{
-			idd=append(idd,c.Add.City)
-			query+="city=?, "
+		if customer.Add.City!=""{
+			idd=append(idd,customer.Add.City)
+			query+=", city=? "
 		}
 
-		if c.Add.State!=""{
-			idd=append(idd,c.Add.State)
-			query+="state=? "
+		if customer.Add.State!=""{
+			idd=append(idd,customer.Add.State)
+			query+=", state=? "
 		}
 
 		query+="where address.cid=?"
-		idd=append(idd,ide)
-		_,err1:=db.Exec(query,idd...)
+		idd=append(idd,id)
+		_,ok1:=db.Exec(query,idd...)
 
-		fmt.Println("in ")
-		if err1!=nil{
-
+		if ok1!=nil{
+			panic(ok1)
 		}
-
-
-
 
 		query=`select * from customer inner join address on customer.id=address.cid where customer.id=?`
-		rows,_:=db.Query(query,ide)
-	var cust Customer
+		rows,_:=db.Query(query,id)
+		var detail Customer
 		for rows.Next(){
-
-			rows.Scan(&cust.Id,&cust.Name,&cust.Dob,&cust.Add.Id,&cust.Add.StreetName,&cust.Add.City,&cust.Add.State,&cust.Add.CustomerId)
-
+			rows.Scan(&detail.Id,&detail.Name,&detail.Dob,&detail.Add.Id,&detail.Add.StreetName,&detail.Add.City,&detail.Add.State,&detail.Add.CustomerId)
 		}
-		json.NewEncoder(w).Encode(cust)
+		if detail.Id==0{
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(detail)
 
 }
-func DeleteCutomer(w http.ResponseWriter,r *http.Request){
-		db,err:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
+func DeleteCustomer(w http.ResponseWriter,r *http.Request){
+		db,ok:=sql.Open("mysql","root:Manish@123Sharma@/Customer_services")
 		defer db.Close()
-		if err!=nil{
-
+		if ok!=nil{
+			w.WriteHeader(http.StatusBadRequest)
 		}
-
 		vars:=mux.Vars(r)
 	    id,_:=strconv.Atoi(vars["id"])
-	    var idr[] interface{}
-	    idr=append(idr,id)
-		var c Customer
-		query:=`select * from customer inner join address on customer.id=address.cid where customer.id=?`
-		rows,err:=db.Query(query,idr...)
+	    var info[] interface{}
+	    info=append(info,id)
 
-		switch{
-		case err!=nil:
-			log.Fatal(err)
-		default:
-			for rows.Next() {
-				rows.Scan(&c.Id, &c.Name, &c.Dob, &c.Add.Id,&c.Add.StreetName,&c.Add.City,&c.Add.State,&c.Add.CustomerId)
-
-			}
-			query = `delete from customer where id=?`
-			_, err = db.Exec(query, idr...)
-
-			json.NewEncoder(w).Encode(c)
-
+	    query := `delete from customer where id=?`
+	    _, ok = db.Exec(query, info...)
+	    if ok!=nil{
+	    	w.WriteHeader(http.StatusBadRequest)
 		}
-
+		w.WriteHeader(http.StatusNoContent)
+	    fmt.Println("successfully deleted")
 }
 
 
 func main(){
 	r:=mux.NewRouter()
 	r.HandleFunc("/customer",getCustomer).Methods(http.MethodGet)
-	r.HandleFunc("/customer/{id:[0-9]+}",getCustomerId).Methods(http.MethodGet)
+	r.HandleFunc("/customer/{id:[0-9]+}",getCustomerById).Methods(http.MethodGet)
 	r.HandleFunc("/customer/",createCustomer).Methods(http.MethodPost)
 	r.HandleFunc("/customer/{id:[0-9]+}",updateCustomer).Methods(http.MethodPut)
-	r.HandleFunc("/customer/{id:[0-9]+}",DeleteCutomer).Methods(http.MethodDelete)
+	r.HandleFunc("/customer/{id:[0-9]+}",DeleteCustomer).Methods(http.MethodDelete)
 	log.Fatal(http.ListenAndServe(":3003",r))
 }
