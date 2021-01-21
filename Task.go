@@ -194,52 +194,54 @@ func updateCustomer(w http.ResponseWriter,r *http.Request){
 		}
 		vars:=mux.Vars(r)
 		id:=vars["id"]
-		query:=`update customer set`
-		var info [] interface{}
-
 		var customer Customer
 		body,_:=ioutil.ReadAll(r.Body)
 		json.Unmarshal(body,&customer)
+
 		if customer.Name!=""{
+			query:=`update customer set`
+			var info [] interface{}
 			query+=" name=?"
 			info=append(info,customer.Name)
+			query+=" where customer.id=?"
+			info=append(info,id)
+			_,er:=db.Exec(query,info...)
+
+			if er!=nil{
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 		}
 
-		query+=" where customer.id=?"
-		info=append(info,id)
-		_,er:=db.Exec(query,info...)
+		check:=Address{}
+		if  customer.Add!=check {
+			query := `update address set `
+			var idd []interface{}
+			if customer.Add.StreetName != "" {
+				idd = append(idd, customer.Add.StreetName)
+				query += " street_name=?,"
+			}
 
-		if er!=nil{
-			w.WriteHeader(http.StatusBadRequest)
-			return
+			if customer.Add.City != "" {
+				idd = append(idd, customer.Add.City)
+				query += " city=?,"
+			}
+
+			if customer.Add.State != "" {
+				idd = append(idd, customer.Add.State)
+				query += " state=?,"
+			}
+			query=query[:len(query)-1]
+			query += " where address.cid=?"
+			idd = append(idd, id)
+			_, ok1 := db.Exec(query, idd...)
+
+			if ok1 != nil {
+				panic(ok1)
+			}
 		}
 
-		query=`update address set `
-		var idd []interface{}
-		if customer.Add.StreetName!="" {
-			idd=append(idd,customer.Add.StreetName)
-			query+=" street_name=? "
-		}
-
-		if customer.Add.City!=""{
-			idd=append(idd,customer.Add.City)
-			query+=", city=? "
-		}
-
-		if customer.Add.State!=""{
-			idd=append(idd,customer.Add.State)
-			query+=", state=? "
-		}
-
-		query+="where address.cid=?"
-		idd=append(idd,id)
-		_,ok1:=db.Exec(query,idd...)
-
-		if ok1!=nil{
-			panic(ok1)
-		}
-
-		query=`select * from customer inner join address on customer.id=address.cid where customer.id=?`
+		query:=`select * from customer inner join address on customer.id=address.cid where customer.id=?`
 		rows,_:=db.Query(query,id)
 		var detail Customer
 		for rows.Next(){
